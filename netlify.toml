@@ -1,0 +1,3 @@
+[build]
+  # Assurez-vous que le chemin des fonctions est bien défini
+  functions = "netlify/functions"
