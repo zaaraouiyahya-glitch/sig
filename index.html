@@ -1556,76 +1556,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fonction pour communiquer avec la Netlify Function (Gemini)
     async function sendMessageToGemini(userMessage) {
-        addMessage(userMessage, 'user');
-        
-        // Ajout du message d'attente
-        addMessage("L'IA réfléchit...", 'ai-response'); 
-        
-        // Cible le dernier message pour y mettre la réponse (sera écrasé)
-        var waitingMessage = chatBody.lastChild;
-        if (waitingMessage) {
-            waitingMessage.classList.add('waiting'); 
-        }
-        
-        try {
-            var response = await fetch('/.netlify/functions/gemini', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ prompt: userMessage }),
-            });
-    
-            // Retrait du message d'attente ou remplacement du texte
-            if (waitingMessage) {
-                chatBody.removeChild(waitingMessage); // On retire le message "L'IA réfléchit..."
-            }
-            
-            if (!response.ok) {
-                throw new Error(`Erreur Netlify: ${response.status}`);
-            }
-    
-            var data = await response.json();
-            addMessage(data.text, 'ai'); // Affiche la réponse de l'IA
-    
-        } catch (error) {
-            console.error('Erreur de communication avec l\'IA:', error);
-            
-            // Si une erreur survient, on affiche un message d'erreur
-            if (waitingMessage) {
-                // On retire le message "L'IA réfléchit..." si ce n'est pas déjà fait
-                if(chatBody.lastChild === waitingMessage) {
-                    chatBody.removeChild(waitingMessage);
-                }
-            }
-            addMessage("Désolé, une erreur est survenue lors de la communication avec l'IA. (Vérifiez votre clé API Netlify)", 'ai');
-        }
-    }
-    
-    // Lier la fonction à l'événement de soumission du formulaire
-    document.addEventListener('DOMContentLoaded', () => {
-        if (chatForm) {
-            chatForm.addEventListener('submit', function(e) {
-                e.preventDefault(); // Empêche le rechargement de la page
-                var userMessage = chatInput.value.trim();
-                
-                if (userMessage !== '') {
-                     sendMessageToGemini(userMessage);
-                     chatInput.value = ''; // Efface le champ de saisie
-                }
-            });
-        }
+  addMessage(userMessage, 'user');
+  
+  // Ajout du message d’attente
+  addMessage("L'IA réfléchit...", 'ai-response');
+  const waitingMessage = chatBody.lastChild;
+  if (waitingMessage) waitingMessage.classList.add('waiting');
+
+  // 🕒 Gestion du timeout pour éviter le 502
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9500); // 9,5 secondes
+
+  try {
+    const response = await fetch('/.netlify/functions/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: userMessage }),
+      signal: controller.signal, // 🧠 ajout important
     });
-    
-    // Optionnel : Basculer l'affichage du corps du chat
-    if (chatHeader && chatBodyElement && chatFormElement) {
-        chatHeader.addEventListener('click', () => {
-            var isHidden = chatBodyElement.style.display === 'none';
-            chatBodyElement.style.display = isHidden ? 'flex' : 'none';
-            chatFormElement.style.display = isHidden ? 'flex' : 'none';
-            chatHeader.innerText = isHidden ? "Assistant IA Gémini" : "Assistant IA Gémini (Masqué)";
-        });
+
+    // Supprime le message d’attente
+    if (waitingMessage && chatBody.contains(waitingMessage)) {
+      chatBody.removeChild(waitingMessage);
     }
+
+    if (!response.ok) {
+      throw new Error(`Erreur Netlify: ${response.status}`);
+    }
+
+    const data = await response.json();
+    addMessage(data.text || "Réponse vide reçue.", 'ai');
+
+  } catch (error) {
+    console.error("Erreur de communication avec l'IA :", error);
+
+    // Si l’erreur vient du timeout
+    if (error.name === "AbortError") {
+      addMessage("⏱️ Le serveur a mis trop de temps à répondre (limite Netlify atteinte).", 'ai');
+    } else {
+      addMessage("🚫 Désolé, une erreur est survenue lors de la communication avec l'IA.", 'ai');
+    }
+
+    if (waitingMessage && chatBody.contains(waitingMessage)) {
+      chatBody.removeChild(waitingMessage);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 
 </script>
 </body>
